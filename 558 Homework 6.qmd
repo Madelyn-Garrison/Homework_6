@@ -1,0 +1,256 @@
+---
+title: "Homework 6"
+format: html
+editor: visual
+---
+
+## Task 1: Conceptual Questions
+
+1.  What is the purpose of the lapply() function? What is the equivalent purrr function?
+
+> lapply() applies a single function to every element in a list. The purrr equivalent is map().
+
+2.  Suppose we have a list called my_list. Each element of the list is a numeric data frame (all columns are numeric). We want use lapply() to run the code cor(numeric_matrix, method = "kendall") on each element of the list. Write code to do this below! (I’m really trying to ask you how you specify method = "kendall" when calling lapply())
+
+> You would add method = 'kendall' as an additional argument in lapply(). It would be lapply(x, Fun = cor, method = 'kendall').
+
+3.  What are two advantages of using purrr functions instead of the BaseR apply family?
+
+> purrr is more consistent and has additional helper functions.
+
+4.  What is a side-effect function?
+
+> A side-effect function does something other than the 'main' goal of the function. There is additional action taken by r.
+
+5.  Why can you name a variable sd in a function and not cause any issues with the sd function?
+
+> A custom function has its own temporary environment. Anything created inside the function only lives there.
+
+## Task 2: Writing R Functions
+
+Below, a function was created to calculate the root mean square error (RMSE). The function takes in a vector of observations that must be all be numeric and a vector of predictions that must all be numeric. Those two vectors must also be equal in length (each observation having a corresponding prediction). The function includes an optional argument to handle any missing values in a vector. The function can't handle missing values by default, so an argument must be provided if a missing value is present.
+
+```{r}
+getRMSE<-function(obs, pres, ...){
+if(length(obs)!=length(pres)){
+  stop('Different number of responses and predictions.')
+}
+z<- obs - pres
+vn<-z^2
+g<-mean(vn, ...)
+x<-sqrt(g)
+return(x)
+}
+```
+
+Testing our function:
+
+```{r}
+set.seed(10)
+n <- 100
+x <- runif(n)
+resp <- 3 + 10 * x + rnorm(n)
+pred <- predict(lm(resp ~ x), data.frame(x))
+
+getRMSE(resp, pred)
+```
+
+Things change if a missing value is added to a vector.
+
+```{r}
+resp[1]<-NA
+resp[6]<-NA
+
+getRMSE(resp, pred)
+```
+
+The function cannot run with the missing value. We must specify that we want missing values removed.
+
+```{r}
+getRMSE(resp, pred, na.rm=TRUE)
+```
+
+Below, a function was created to calculate the mean absolute deviation (MAE). The function takes in a vector of observations that must be all be numeric and a vector of predictions that must all be numeric. Those two vectors must also be equal in length (each observation having a corresponding prediction). The function includes an optional argument to handle any missing values in a vector. The function can't handle missing values by default, so an argument must be provided if a missing value is present.
+
+```{r}
+getMAE<-function(obs, pres, ...){
+  if(length(obs)!=length(pres)){
+  stop('Different number of responses and predictions.')
+}
+z<- obs - pres
+vn<-abs(z)
+g<-mean(vn, ...)
+return(g)
+}
+```
+
+Testing our function:
+
+```{r}
+set.seed(10)
+n <- 100
+x <- runif(n)
+resp <- 3 + 10 * x + rnorm(n)
+pred <- predict(lm(resp ~ x), data.frame(x))
+
+getMAE(resp, pred)
+```
+
+Things change if a missing value is added to a vector.
+
+```{r}
+resp[2]<-NA
+resp[7]<-NA
+
+getRMSE(resp, pred)
+```
+
+The function cannot run with the missing value. We must specify that we want missing values removed.
+
+```{r}
+getMAE(resp, pred, na.rm=TRUE)
+```
+
+Now we will build a function that can call either of the above functions or both, with both being returned by default.
+
+```{r}
+getMEAS<-function(obs, pres, RMSE=TRUE, MAE=TRUE, ...) {
+  if (!is.vector(obs)|!is.atomic(obs)|!is.numeric(obs)){
+    stop('The response vector does not meet function requirements.')
+  }
+  if (!is.vector(pres)|!is.atomic(pres)|!is.numeric(pres)){
+    stop('The prediction vector does not meet function requirements.')
+  }
+    if(length(obs)!=length(pres)){
+  stop('Different number of responses and predictions.')
+}
+  if (RMSE==TRUE & MAE==FALSE) {
+    x<-getRMSE(obs, pres, ...)
+    my_list<-list(RMSE=x)
+  }
+  if (RMSE==FALSE & MAE==TRUE){
+    y<-getMAE(obs, pres, ...)
+    my_list<-list(MAE=y)
+  }
+  if (RMSE==TRUE & MAE==TRUE){
+    x<-getRMSE(obs, pres, ...)
+    y<-getMAE(obs, pres, ...)
+    my_list<-list(RMSE=x, MAE=y)
+  }
+return(my_list)
+}
+```
+
+```{r}
+set.seed(10)
+n <- 100
+x <- runif(n)
+resp <- 3 + 10 * x + rnorm(n)
+pred <- predict(lm(resp ~ x), data.frame(x))
+
+getMEAS(resp, pred)
+
+```
+
+The function can also call just one of the measurements.
+
+```{r}
+getMEAS(resp, pred, RMSE=FALSE)
+```
+
+Let's give our function vectors with missing values.
+
+```{r}
+resp[3]<-NA
+resp[10]<-NA
+
+getMEAS(resp, pred)
+```
+
+We can also specify removing missing values for this function.
+
+```{r}
+getMEAS(resp, pred, na.rm=TRUE)
+```
+
+The function will not work if the inputs are not of the correct type. For example, the function will not work if the prediction values are stored in a data frame, not a vector. I was unable to actually run this example. It correctly produced the error message, but then I was unable to render the website because of the error. I was unable to find my way around it.
+
+```{r}
+#| error: true
+pred<-data.frame(pred)
+
+getMEAS(resp, pred, na.rm=TRUE)
+```
+
+## Task 3: Querying an API and a Tidy-Style Function
+
+```{r}
+#| include: false
+#| echo: false
+library(httr)
+library(jsonlite)
+library(purrr)
+library(lubridate)
+library(dplyr)
+```
+
+Now we are going to create a function that queries newsapi.org. Our function gives the user the option to specify a subject they are interested, the start date to search from, and an API key. Then the function will call data from news articles that meet those specifications.
+
+The function uses `get()` to access the API. The function then parses that data for actual article information ('content'). Then we use `pluck()` to grab the 'articles' element and that is returned as a data frame.
+
+```{r}
+get_NEWS_API<-function(topic, startdate, APIkey){
+  start<-'https://newsapi.org/v2/everything?q='
+  topic_url<-topic
+  continue<-'&from='
+  startdate_url<-startdate
+  continue2<-'&sortBy=popularity&apiKey='
+  APIkey_url<-APIkey
+  try<-paste0(start,topic_url,continue,startdate_url,continue2,APIkey_url)
+  try2<-httr::GET(try)
+  try3<-fromJSON(rawToChar(try2$content))
+  try4<-purrr::pluck(try3,"articles")
+  return(try4)
+}
+```
+
+We'll use our function to create two objects, one about football and the other about baseball.
+
+```{r}
+football<-get_NEWS_API('football','2024-10-14','42b42fbb54a644faa2b984b30dbe20ae')
+
+baseball<-get_NEWS_API('baseball','2024-10-14','42b42fbb54a644faa2b984b30dbe20ae')
+```
+
+We'll summarize the names of the sources from each object. The tables provide counts for each source name.
+
+```{r}
+table(football$source$name)
+```
+
+```{r}
+table(baseball$source$name)
+```
+
+Next, we'll convert `publishedAt` to a date. Then we'll sort the data by their published date/time, ascending. Then we'll use `lag()` to grab `publishedAt` from the previous observation and create `prev_pub`. We can subtract `prev_pub` from `publishedAt` to calculate the time in seconds since the last article was published. `pub_diff` shows that time in seconds.
+
+```{r}
+football<-football |>
+  mutate(publishedAt=ymd_hms(publishedAt)) |>
+  arrange(publishedAt) |>
+  mutate(prev_pub=lag(publishedAt), pub_diff = as.numeric(publishedAt - prev_pub))
+
+baseball<-baseball |>
+  mutate(publishedAt=ymd_hms(publishedAt)) |>
+  arrange(publishedAt) |>
+  mutate(prev_pub=lag(publishedAt), pub_diff = as.numeric(publishedAt - prev_pub))
+```
+
+Now we'll use our `football` data frame and summarize the `publishedAt` and `pub_diff` variables.
+
+```{r}
+small_football<-football |>
+  select(publishedAt, pub_diff)
+
+map(small_football, \(x) c(mean(x, na.rm=TRUE), median(x, na.rm=TRUE), sd(x, na.rm=TRUE)))
+```
